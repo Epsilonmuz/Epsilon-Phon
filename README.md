@@ -2,6 +2,8 @@
 
 ![Epsilon Phon](docs/epsilon-phon-editor.png)
 
+![Built-in manual](docs/epsilon-phon-help.png)
+
 Your ears change their EQ with volume (Fletcher-Munson, today ISO 226). Epsilon Phon measures your mix the way the hits are measured, then shows what you actually hear at your listening level and at phone / loud volumes.
 
 **Put it last on your master, load 1–10 hit records in your lane, play your whole song.**
@@ -13,6 +15,7 @@ Your ears change their EQ with volume (Fletcher-Munson, today ISO 226). Epsilon 
 | Section | What it does |
 |---|---|
 | **Live meter (real time)** | Every band against the target *right now*: bars up (amber/red) = louder than it should be, down (blue) = missing, with peak-hold ticks. The worst offenders are named in words: `TOO LOUD NOW  251 Hz +4.2 dB`. Reacts within about a quarter of a second; gated in silence. |
+| **Help (built-in manual)** | The HELP button opens a scrollable manual inside the plugin: quick start, every button and knob, how to read the numbers, colours, Fletcher-Munson in plain words. Hover any control and the bottom bar explains it. |
 | Tonal balance vs target | Your mix's long-term third-octave balance (25 Hz–16 kHz) against the target, loudness-matched, with a live curve. Over = amber, under = blue. |
 | Ear X-ray | Redraws everything through the ISO 226 contour at your listening level — what your ears hear, not what the meter sees. |
 | Load hits / Target | Drop WAV/AIFF/FLAC (and MP3/M4A on macOS). Several records are averaged into one standard. Or pick a modelled genre curve: Trap, Drill, Dembow / Reggaeton, Hip-Hop, Pop, R&B, EDM, Rock. |

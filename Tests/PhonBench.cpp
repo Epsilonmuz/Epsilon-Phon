@@ -180,17 +180,18 @@ int main(int argc, char** argv)
             setParam(p, "match", 100.0f);
             p.resetAnalysis();
             play(p, sr, 10.0, mix);
-            for (int pass = 0; pass < 2; ++pass)
+            for (int pass = 0; pass < 3; ++pass)
             {
                 p.state.state.setProperty("earXray", pass == 1, nullptr);
                 std::unique_ptr<juce::AudioProcessorEditor> ed(p.createEditor());
                 auto* pe = dynamic_cast<EpsilonPhonEditor*>(ed.get());
                 ed->setSize(1080, 780);
                 for (int i = 0; i < 12; ++i) { play(p, sr, 0.1, mix); juce::MessageManager::getInstance()->runDispatchLoopUntil(20); if (pe) pe->refreshNow(); }
+                if (pe && pass == 2) pe->showHelp(true);
                 const auto t0 = juce::Time::getMillisecondCounterHiRes();
                 auto img = ed->createComponentSnapshot(ed->getLocalBounds(), true, 2.0f);
                 const auto ms = juce::Time::getMillisecondCounterHiRes() - t0;
-                auto file = snapDir.getChildFile(pass == 0 ? "epsilon-phon-editor.png" : "epsilon-phon-ear-xray.png");
+                auto file = snapDir.getChildFile(pass == 0 ? "epsilon-phon-editor.png" : pass == 1 ? "epsilon-phon-ear-xray.png" : "epsilon-phon-help.png");
                 file.deleteFile();
                 juce::PNGImageFormat png;
                 if (auto os = file.createOutputStream()) png.writeImageToStream(img, *os);

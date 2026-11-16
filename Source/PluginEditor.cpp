@@ -272,6 +272,9 @@ void LiveMeter::paint(juce::Graphics& g)
         g.drawText(t, box, juce::Justification::centred, false);
         x += w + 6.0f;
     };
+    g.setFont(font(Weight::Bold, 9.0f).withExtraKerningFactor(0.14f));
+    g.setColour(faint(pal()));
+    g.drawText("LIVE METER  -  UP = TOO LOUD  -  DOWN = MISSING", juce::Rectangle<float>(r.getRight() - 320.0f, r.getBottom() - 12.0f, 320.0f, 12.0f), juce::Justification::centredRight, false);
     if (! haveTarget) label("LIVE  -  LOAD HITS OR PICK A GENRE TO JUDGE AGAINST", faint(pal()));
     else if (! tracker.active) label("LIVE  -  WAITING FOR AUDIO", faint(pal()));
     else
@@ -445,6 +448,155 @@ void NotesView::paint(juce::Graphics& g)
 }
 
 //==============================================================================
+// HelpOverlay
+HelpOverlay::HelpOverlay()
+{
+    setOpaque(true);
+    viewport.setViewedComponent(&content, false);
+    viewport.setScrollBarsShown(true, false);
+    viewport.setScrollBarThickness(10);
+    viewport.getVerticalScrollBar().setColour(juce::ScrollBar::thumbColourId, pal().trim.withAlpha(0.6f));
+    addAndMakeVisible(viewport);
+    addAndMakeVisible(closeButton);
+    closeButton.onClick = [this] { if (onClose) onClose(); };
+}
+void HelpOverlay::setSections(std::vector<Section> s) { content.sections = std::move(s); resized(); }
+void HelpOverlay::resized()
+{
+    auto r = getLocalBounds().reduced(size::space4);
+    auto top = r.removeFromTop(34);
+    closeButton.setBounds(top.removeFromRight(90).withSizeKeepingCentre(90, 28));
+    r.removeFromTop(6);
+    viewport.setBounds(r);
+    const int w = r.getWidth() - viewport.getScrollBarThickness() - 4;
+    content.setSize(w, content.layout(w));
+}
+void HelpOverlay::paint(juce::Graphics& g)
+{
+    g.fillAll(pal().bg);
+    auto r = getLocalBounds().reduced(size::space4).removeFromTop(34).toFloat();
+    drawSectionLabel(g, { r.getX() + 2.0f, r.getCentreY() }, "Epsilon Phon manual", pal());
+    g.setColour(faint(pal()));
+    g.setFont(caption());
+    g.drawText("Scroll for more. Hover any control in the plugin to read what it does in the bottom bar.", r.withTrimmedLeft(210.0f).withTrimmedRight(100.0f), juce::Justification::centredLeft, true);
+}
+int HelpOverlay::Content::layout(int width)
+{
+    rows.clear();
+    const float nameW = 170.0f, pad = 16.0f;
+    float y = 4.0f;
+    for (auto& sec : sections)
+    {
+        Row h; h.heading = true; h.name = sec.title; h.y = y + 10.0f; h.h = 30.0f;
+        rows.push_back(std::move(h));
+        y += 44.0f;
+        for (auto& it : sec.items)
+        {
+            Row r; r.name = it.name;
+            juce::AttributedString a;
+            a.append(it.text, font(Weight::Medium, 13.5f), pal().ink.withAlpha(0.86f));
+            a.setWordWrap(juce::AttributedString::byWord);
+            a.setLineSpacing(3.0f);
+            r.text.createLayout(a, (float) width - nameW - pad * 2.0f);
+            r.y = y; r.h = juce::jmax(20.0f, r.text.getHeight());
+            y += r.h + 12.0f;
+            rows.push_back(std::move(r));
+        }
+        y += 8.0f;
+    }
+    return (int) y + 12;
+}
+void HelpOverlay::Content::paint(juce::Graphics& g)
+{
+    const float nameW = 170.0f, pad = 16.0f;
+    const auto clip = g.getClipBounds().toFloat();
+    for (auto& r : rows)
+    {
+        if (r.y > clip.getBottom() || r.y + r.h + 20.0f < clip.getY()) continue;
+        if (r.heading)
+        {
+            g.setColour(pal().surface);
+            g.fillRoundedRectangle(0.0f, r.y, (float) getWidth(), r.h, 6.0f);
+            g.setColour(pal().live);
+            g.fillRoundedRectangle(pad, r.y + r.h * 0.5f - 1.25f, 10.0f, 2.5f, 0.5f);
+            g.setColour(pal().ink);
+            g.setFont(font(Weight::Bold, 12.0f).withExtraKerningFactor(0.18f));
+            g.drawText(r.name.toUpperCase(), juce::Rectangle<float>(pad + 18.0f, r.y, (float) getWidth() - 60.0f, r.h), juce::Justification::centredLeft, false);
+        }
+        else
+        {
+            g.setColour(pal().trim);
+            g.setFont(font(Weight::Bold, 12.5f));
+            g.drawFittedText(r.name, juce::Rectangle<float>(pad, r.y, nameW - 12.0f, 34.0f).toNearestInt(), juce::Justification::topLeft, 2);
+            r.text.draw(g, juce::Rectangle<float>(pad + nameW, r.y, (float) getWidth() - nameW - pad * 2.0f, r.h));
+        }
+    }
+}
+
+//==============================================================================
+void EpsilonPhonEditor::describe(juce::Component& c, const juce::String& name, const juce::String& text)
+{
+    helpEntries.push_back({ &c, name, text });
+    if (auto* k = dynamic_cast<epsilon_ui::Knob*>(&c)) k->setTooltip(text);
+    else if (auto* t = dynamic_cast<juce::SettableTooltipClient*>(&c)) t->setTooltip(text);
+}
+
+std::vector<HelpOverlay::Section> EpsilonPhonEditor::manual() const
+{
+    std::vector<HelpOverlay::Section> m;
+    m.push_back({ "Quick start", {
+        { "1  Place it", "Put Epsilon Phon LAST on your master channel, after your limiter. It adds no latency." },
+        { "2  Set the standard", "Press LOAD HITS and choose 1-10 finished hit records in your exact style (or drag them onto the plugin). They are averaged into one target. No records handy? Pick a genre in TARGET." },
+        { "3  Set your volume", "Turn LISTENING LEVEL to how loud your speakers really are at your seat. Don't know? Leave it at 79 dB (small room)." },
+        { "4  Play the whole song", "Watch the LIVE METER: anything amber or red is louder than it should be right now, and it is named in words (for example TOO LOUD NOW 251 Hz +4.2 dB). Blue means missing." },
+        { "5  Fix and check", "Read ENGINEER NOTES for the biggest fixes, fix them in your mix, press RESET and play again. HIT MATCH climbing toward 100 means you are closing in on the hits." } } });
+
+    HelpOverlay::Section controls { "Every button and knob", {} };
+    for (auto& e : helpEntries) controls.items.push_back({ e.name, e.text });
+    m.push_back(std::move(controls));
+
+    m.push_back({ "Reading the loudness numbers", {
+        { "Integrated LUFS", "The loudness of everything since you pressed Reset - the one number streaming services measure. Play the full song to get a true reading." },
+        { "Short-term", "Loudness of the last 3 seconds. Tells you how loud the current section (hook, verse) is. This is what the bar shows." },
+        { "Momentary", "Loudness of the last 0.4 seconds. Follows individual hits and words." },
+        { "True peak (dBTP)", "The highest peak, including peaks between samples. Turns red above -1 dBTP: streaming encoders can distort above that." },
+        { "PLR", "Peak-to-loudness ratio: true peak minus integrated. How much punch is left. Around 9 dB is typical for current hits; much less means it is squashed." },
+        { "LRA", "Loudness range: how much the loudness moves between quiet and loud sections." },
+        { "Target / To target", "The loudness goal and how many LU you must go up (+) or down (-) to reach it." },
+        { "White tick on the bar", "The loudness goal. The bar turns green when the current section is within 1 LU of it." } } });
+
+    m.push_back({ "Colours and words", {
+        { "Amber / red", "Louder than the target. Amber = 2-4 dB over, red = more than 4 dB over." },
+        { "Blue", "Quieter than the target (missing)." },
+        { "Green", "Within tolerance. In the live meter the green zone is +-2 dB." },
+        { "Platinum line", "The target (your hits or the genre curve), shown at the same loudness as your mix. The soft band around it is +-1.5 dB." },
+        { "White line", "Your mix's average since Reset. The thin champagne line is the last fraction of a second." },
+        { "Sub, Low, Low-mid, High-mid, High", "The five ranges: under 63 Hz, 63-250 Hz, 250 Hz-1 kHz, 1-5 kHz, above 5 kHz." },
+        { "Phon / sones", "Phon is how loud something sounds, not how loud it measures. Sones are the same idea on a scale where double the number sounds twice as loud. The Translation numbers use them." } } });
+
+    m.push_back({ "Why volume changes your mix (Fletcher-Munson)", {
+        { "The effect", "Your ears hear bass and extreme treble worse at low volume than at high volume. The same mix sounds thin when quiet and bass-heavy when loud. The modern measurement of this is the ISO 226 standard, which this plugin uses." },
+        { "What goes wrong", "Mix quietly and you add too much bass and top. Mix loud and you add too little. Either way the mix falls apart on other systems." },
+        { "What to do", "Pick one moderate monitor level and stay there (about 79 dB SPL in a small room, 83-85 in a large one), compare against real hits at the same loudness, and check phone and loud playback with HEAR AT and the TRANSLATION grid." },
+        { "Calibrating", "Play pink noise at -20 dBFS RMS, hold a sound-level meter (C-weighted, slow) at your seat, and set your speaker volume until it reads your chosen level. Mark that position on the volume knob." } } });
+
+    m.push_back({ "Good to know", {
+        { "Before you bounce", "Set HEAR AT to OFF - it is for listening only and would be printed into your file. The bottom bar warns you while it is on. MATCH is printed on purpose: set it to 0 % if you only want to measure." },
+        { "Best references", "Use recent, mastered hits in your own lane (dembow against dembow, drill against drill). 3-10 records give a steadier target than one." },
+        { "Genre curves", "The built-in genre targets are models shaped from published averages, not measurements of specific songs. Your own loaded hits are always the more accurate standard." },
+        { "The live meter jumps", "That is normal: a kick or a vocal note really does poke out for a moment. Worry about bands that stay amber or red, or keep being named." },
+        { "Limits", "Matching the hits' balance puts you in the right zone; it does not replace your taste. Some hit records break the rules on purpose." } } });
+    return m;
+}
+
+void EpsilonPhonEditor::showHelp(bool shouldShow)
+{
+    if (shouldShow) { help.setSections(manual()); help.toFront(false); }
+    help.setVisible(shouldShow);
+    helpButton.setToggleState(shouldShow, juce::dontSendNotification);
+}
+
+//==============================================================================
 EpsilonPhonEditor::EpsilonPhonEditor(EpsilonPhonProcessor& p) : AudioProcessorEditor(&p), proc(p)
 {
     setLookAndFeel(&look);
@@ -456,34 +608,53 @@ EpsilonPhonEditor::EpsilonPhonEditor(EpsilonPhonProcessor& p) : AudioProcessorEd
 
     targetBox.addItemList(EpsilonPhonProcessor::targetChoices(), 1);
     targetAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc.state, "target", targetBox);
-    targetBox.setTooltip("What 'standard hit' means: your loaded hit records, or a modelled genre curve");
     loudBox.addItemList({ "Match target", "Streaming -14", "Apple -16", "Club -7" }, 1);
     loudAtt = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(proc.state, "loudTarget", loudBox);
-    loudBox.setTooltip("Loudness goal. 'Match target' uses the hits' own measured integrated loudness");
 
-    loadButton.setTooltip("Load one or more hit records (WAV/AIFF/FLAC/MP3). Several are averaged into one target");
     loadButton.onClick = [this] { chooseFiles(); };
-    resetButton.setTooltip("Start a new measurement (spectrum average + integrated loudness)");
     resetButton.onClick = [this] { proc.resetAnalysis(); };
-    learnButton.setTooltip("Take the correction from your mix's average vs the target and arm the Match EQ (max +-6 dB per octave)");
     learnButton.onClick = [this] { proc.learnMatch(); };
-    clearButton.setTooltip("Forget the learned match curve");
     clearButton.onClick = [this] { proc.clearMatch(); };
     xrayButton.setClickingTogglesState(true);
     xrayButton.setToggleState((bool) proc.state.state.getProperty("earXray", false), juce::dontSendNotification);
-    xrayButton.setTooltip("Ear X-ray: redraw the balance through the ISO 226 equal-loudness contour at your listening level - what you actually hear");
     xrayButton.onClick = [this] { proc.state.state.setProperty("earXray", xrayButton.getToggleState(), nullptr); timerCallback(); };
-    listenKnob.setTooltip("How loud you monitor at the seat (dB SPL, C-weighted). 79 dB small room, 83-85 dB large room");
-    matchKnob.setTooltip("How much of the learned Match EQ goes on the mix (this IS printed to the bounce)");
-    outputKnob.setTooltip("Output gain (before the meter)");
-    hearAt.setTooltip("Hear your mix as it would sound at another volume, loudness-matched (ISO 226). Monitor only - turn Off before bouncing");
 
-    for (juce::Component* c : std::initializer_list<juce::Component*> { &loadButton, &resetButton, &targetBox, &graph, &live, &grid, &loudness, &notes,
+
+    helpButton.setClickingTogglesState(true);
+    helpButton.onClick = [this] { showHelp(helpButton.getToggleState()); };
+    help.onClose = [this] { showHelp(false); };
+
+    // One list feeds the tooltips, the hover-help line in the bottom bar and the manual.
+    describe(helpButton, "HELP", "Opens the built-in manual: quick start, every control, how to read the numbers.");
+    describe(targetBox, "TARGET", "The standard you are judged against: 'Hit references' = the records you loaded, or a modelled genre curve.");
+    describe(loadButton, "LOAD HITS", "Choose 1-10 finished hit records (WAV, AIFF, FLAC, MP3). They are averaged into your target. You can also drag files onto the plugin.");
+    describe(resetButton, "RESET", "Starts a fresh measurement: clears the average curve and the integrated loudness. Press it after you change your mix.");
+    describe(xrayButton, "EAR X-RAY", "Redraws the graph the way your ears hear it at your listening level (ISO 226), instead of how a meter sees it.");
+    describe(graph, "TONAL BALANCE graph", "Bass on the left, treble on the right. White = your mix's average, platinum = the target, thin line = right now. Amber fill = too much, blue = too little.");
+    describe(live, "LIVE METER", "Real time: each bar is one frequency band against the target right now. Up amber/red = louder than it should be, down blue = missing. Worst ones are named above the bars.");
+    describe(loudBox, "GOAL", "Loudness goal for the meter: 'Match target' = as loud as your hits, or Streaming -14, Apple -16, Club -7 LUFS.");
+    describe(loudness, "LOUDNESS panel", "Integrated = whole song (what streaming measures). Short-term = last 3 s. True peak red = above -1 dBTP. PLR = punch left. To target = how far to go.");
+    describe(grid, "TRANSLATION grid", "How each range SOUNDS against the hits at phone volume (60 dB), your volume, and loud (90 dB). + = heavier, - = thinner. Green is good. HIT MATCH is the overall score.");
+    describe(notes, "ENGINEER NOTES", "The biggest fixes in plain words, most important first. Appear after about 8 seconds of audio.");
+    describe(listenKnob, "LISTENING LEVEL", "How loud your speakers are at your seat, in dB SPL. 79 = small room, 83-85 = large room. Sets what Ear X-ray, Translation and Hear At are based on.");
+    describe(matchKnob, "MATCH", "How much of the learned Match EQ is applied to your mix. This IS printed when you bounce. 0 % = measure only.");
+    describe(outputKnob, "OUTPUT", "Output volume trim in dB, applied before the loudness meter.");
+    describe(learnButton, "LEARN MATCH", "Works out a gentle 10-band EQ (max 6 dB per band) that moves your mix's average toward the target, and switches it on. Play at least 10 s first.");
+    describe(clearButton, "CLEAR", "Removes the learned Match EQ.");
+    describe(hearAt, "HEAR AT", "Lets you hear your mix as it would sound at Phone, Quiet or Loud volume without touching your speakers. Listening only - set to OFF before bouncing.");
+
+    for (juce::Component* c : std::initializer_list<juce::Component*> { &helpButton, &loadButton, &resetButton, &targetBox, &graph, &live, &grid, &loudness, &notes,
                                                                          &learnButton, &clearButton, &xrayButton, &loudBox, &listenKnob, &matchKnob, &outputKnob, &hearAt })
         addAndMakeVisible(c);
 
     setResizable(true, true);
-    live.setInterceptsMouseClicks(false, false);
+    targetCaption.setText("TARGET", juce::dontSendNotification);
+    targetCaption.setFont(font(Weight::Bold, 9.5f).withExtraKerningFactor(0.16f));
+    targetCaption.setColour(juce::Label::textColourId, pal().inkMuted);
+    targetCaption.setJustificationType(juce::Justification::centredRight);
+    targetCaption.setInterceptsMouseClicks(false, false);
+    addAndMakeVisible(targetCaption);
+    addChildComponent(help);
     setResizeLimits(960, 700, 1600, 1100);
     setSize(1080, 780);
     timerCallback();
@@ -494,7 +665,8 @@ EpsilonPhonEditor::~EpsilonPhonEditor() { setLookAndFeel(nullptr); }
 
 juce::String EpsilonPhonEditor::statusText() const
 {
-    juce::String s = juce::String(proc.getSampleRateSafe() / 1000.0, 1) + " kHz  \xc2\xb7  zero latency";
+    if (hoverHelp.isNotEmpty()) return hoverHelp;
+    juce::String s = juce::String(proc.getSampleRateSafe() / 1000.0, 1) + " kHz  \xc2\xb7  zero latency  \xc2\xb7  hover anything for help";
     const int h = (int) proc.state.getRawParameterValue("hearAt")->load();
     if (h > 0) s << "  \xc2\xb7  HEAR AT " << EpsilonPhonProcessor::hearAtChoices()[h].toUpperCase() << " ON: MONITOR ONLY, TURN OFF BEFORE BOUNCING";
     return s;
@@ -509,13 +681,14 @@ void EpsilonPhonEditor::paint(juce::Graphics& g)
         cg.fillAll(pal().bg);
         drawPanel(cg, heroPanel.toFloat(), pal(), "Tonal balance vs target");
         drawPanel(cg, livePanel.toFloat(), pal());
-        drawPanel(cg, loudPanel.toFloat(), pal(), juce::String::fromUTF8("Loudness \xc2\xb7 BS.1770"));
+        drawPanel(cg, loudPanel.toFloat(), pal(), "Loudness");
         drawPanel(cg, gridPanel.toFloat(), pal(), "Translation");
         drawPanel(cg, notesPanel.toFloat(), pal(), "Engineer notes");
         drawPanel(cg, ctrlPanel.toFloat(), pal(), "Monitor & match");
         cg.setColour(pal().inkMuted);
         cg.setFont(font(Weight::Bold, 9.5f).withExtraKerningFactor(0.16f));
         cg.drawText("HEAR AT", hearLabel, juce::Justification::centredLeft, false);
+        cg.drawText("GOAL", goalLabel, juce::Justification::centredRight, false);
         // legend in hero panel
         auto lg = juce::Rectangle<int>(heroPanel.getX() + 300, heroPanel.getY() + 12, 360, 16).toFloat();
         const auto item = [&](juce::Colour c, const juce::String& t, float w)
@@ -550,7 +723,11 @@ void EpsilonPhonEditor::resized()
     hc.removeFromRight(8);
     loadButton.setBounds(hc.removeFromRight(104).withSizeKeepingCentre(104, 30));
     hc.removeFromRight(8);
-    targetBox.setBounds(hc.removeFromRight(190).withSizeKeepingCentre(190, 30));
+    targetBox.setBounds(hc.removeFromRight(180).withSizeKeepingCentre(180, 30));
+    targetCaption.setBounds(hc.removeFromRight(62).withSizeKeepingCentre(62, 30));
+    hc.removeFromRight(4);
+    helpButton.setBounds(hc.removeFromRight(70).withSizeKeepingCentre(70, 30));
+    help.setBounds(getLocalBounds().withTrimmedTop(size::header).withTrimmedBottom(size::footer));
 
     r = r.reduced(size::space4);
     const int bottomH = juce::jmax(220, (int) (r.getHeight() * 0.33f));
@@ -570,6 +747,7 @@ void EpsilonPhonEditor::resized()
     xrayButton.setBounds(heroPanel.getRight() - 112, heroPanel.getY() + 8, 100, 26);
     graph.setBounds(heroPanel.reduced(10).withTrimmedTop(30));
     loudBox.setBounds(loudPanel.getRight() - 150, loudPanel.getY() + 8, 138, 26);
+    goalLabel = { loudBox.getX() - 60, loudBox.getY(), 52, 26 };
     loudness.setBounds(loudPanel.reduced(16).withTrimmedTop(26));
     grid.setBounds(gridPanel.reduced(12).withTrimmedTop(24));
     notes.setBounds(notesPanel.reduced(16).withTrimmedTop(26));
@@ -616,6 +794,15 @@ void EpsilonPhonEditor::filesDropped(const juce::StringArray& files, int, int)
 
 void EpsilonPhonEditor::timerCallback()
 {
+    {
+        // hover help: explain whatever is under the mouse in the bottom bar
+        juce::String h;
+        auto* under = juce::Desktop::getInstance().getMainMouseSource().getComponentUnderMouse();
+        for (auto* c = under; c != nullptr && c != this && h.isEmpty(); c = c->getParentComponent())
+            for (auto& e : helpEntries) if (e.comp == c) { h = e.name + ":  " + e.text; break; }
+        if (under == nullptr || ! isParentOf(under)) h = {};
+        if (h != hoverHelp) { hoverHelp = h; footer.repaint(); }
+    }
     const auto snap = proc.getSnapshot();
     {
         // real-time meter: every tick, so bars, holds and names keep moving (and release in silence)

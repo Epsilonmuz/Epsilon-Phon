@@ -79,6 +79,32 @@ private:
     juce::String status;
 };
 
+// The built-in manual: opens over the plugin from the Help button. Scrollable; every control and
+// every display is explained from the same list that feeds the hover-help line and the tooltips.
+class HelpOverlay : public juce::Component
+{
+public:
+    struct Item { juce::String name, text; };
+    struct Section { juce::String title; std::vector<Item> items; };
+    HelpOverlay();
+    void setSections(std::vector<Section> s);
+    void paint(juce::Graphics&) override;
+    void resized() override;
+    std::function<void()> onClose;
+private:
+    struct Content : juce::Component
+    {
+        std::vector<Section> sections;
+        struct Row { bool heading = false; juce::String name; juce::TextLayout text; float y = 0, h = 0; };
+        std::vector<Row> rows;
+        int layout(int width);
+        void paint(juce::Graphics&) override;
+    };
+    juce::Viewport viewport;
+    Content content;
+    juce::TextButton closeButton { "Close" };
+};
+
 class EpsilonPhonEditor : public juce::AudioProcessorEditor, public juce::FileDragAndDropTarget, private juce::Timer
 {
 public:
@@ -91,6 +117,7 @@ public:
     void fileDragEnter(const juce::StringArray&, int, int) override { dragOver = true; repaint(); }
     void fileDragExit(const juce::StringArray&) override { dragOver = false; repaint(); }
     void refreshNow() { timerCallback(); }
+    void showHelp(bool shouldShow);
 
 private:
     EpsilonPhonProcessor& proc;
@@ -100,7 +127,15 @@ private:
     juce::TooltipWindow tooltips { this, 700 };
 
     juce::TextButton loadButton { "Load hits" }, resetButton { "Reset" }, learnButton { "Learn match" }, clearButton { "Clear" };
-    juce::TextButton xrayButton { "Ear X-ray" };
+    juce::TextButton xrayButton { "Ear X-ray" }, helpButton { "Help" };
+    HelpOverlay help;
+    struct HelpEntry { juce::Component* comp; juce::String name, text; };
+    std::vector<HelpEntry> helpEntries;
+    juce::String hoverHelp;
+    juce::Rectangle<int> goalLabel;
+    juce::Label targetCaption;
+    void describe(juce::Component&, const juce::String& name, const juce::String& text);
+    std::vector<HelpOverlay::Section> manual() const;
     juce::ComboBox targetBox, loudBox;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> targetAtt, loudAtt;
     epsilon_ui::Knob listenKnob { proc.state, "listen", "Listening level", true };
