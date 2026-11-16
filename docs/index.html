@@ -15,7 +15,9 @@
   .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
   label.btn, button, select { background: var(--raised); color: var(--ink); border:1px solid var(--line); border-radius: 7px; padding: 9px 14px; font: inherit; cursor: pointer; }
   button:disabled { opacity:.45; cursor: default; }
-  input[type=file] { display:none; }
+  input[type=file] { color: var(--ink); font: inherit; max-width: 100%; }
+  input[type=file]::file-selector-button { background: var(--raised); color: var(--ink); border:1px solid var(--line); border-radius: 7px; padding: 9px 14px; font: inherit; margin-right: 10px; }
+  body.drag { outline: 2px dashed var(--live); outline-offset: -8px; }
   canvas { width:100%; height:260px; display:block; background: var(--bg); border:1px solid var(--line); border-radius: 8px; }
   #chips { min-height: 34px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin: 4px 0 10px; }
   .lab { font-size: 11px; font-weight: 700; letter-spacing: .16em; }
@@ -32,11 +34,13 @@
 
   <div class="panel">
     <div class="row">
-      <label class="btn">Choose your mix<input id="file" type="file" accept="audio/*"></label>
+      <input id="file" type="file" aria-label="Choose your mix">
       <select id="genre" aria-label="Target"></select>
       <button id="play" disabled>Play</button>
-      <span id="name" class="note">Pick an audio file. It stays on your device; nothing is uploaded.</span>
+      <button id="test">Test sound</button>
     </div>
+    <p id="name" class="note" style="margin:10px 0 0">Choose a song from your device (WAV, MP3, M4A), or press Test sound to see the meter work without a file. Nothing is uploaded; the file stays on your device.</p>
+    <audio id="player" preload="auto" playsinline></audio>
   </div>
 
   <div class="panel">
@@ -77,31 +81,77 @@ GENRES.forEach((g, i) => sel.add(new Option(g[0], i)));
 let target = profile(0);
 sel.onchange = () => target = profile(+sel.value);
 
-let ctx, analyser, src, buffer, playing = false, bins;
-const playBtn = document.getElementById('play'), nameEl = document.getElementById('name');
-document.getElementById('file').onchange = async e => {
-  const f = e.target.files[0]; if (!f) return;
-  nameEl.textContent = 'Decoding ' + f.name + '…';
+// Audio: the file plays through an <audio> element (streams any format the browser can play, no big
+// decode step), tapped by an analyser. "Test sound" needs no file at all.
+let ctx, analyser, bins, mediaNode, testNode, testGain, playing = false, haveFile = false;
+const playBtn = document.getElementById('play'), testBtn = document.getElementById('test'),
+      nameEl = document.getElementById('name'), player = document.getElementById('player'), fileEl = document.getElementById('file');
+const say = t => nameEl.textContent = t;
+function ensureAudio() {                      // must run inside a tap/click
+  if (!ctx) {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    if (!AC) { say('This browser has no Web Audio support. Try Safari or Chrome.'); return false; }
+    ctx = new AC();
+    analyser = ctx.createAnalyser(); analyser.fftSize = 16384; analyser.smoothingTimeConstant = 0.6;
+    bins = new Float32Array(analyser.frequencyBinCount);
+    analyser.connect(ctx.destination);
+  }
+  if (ctx.state !== 'running') ctx.resume().catch(() => {});
+  return true;
+}
+function loadFile(f) {
+  if (!f) return;
+  stopTest();
   try {
-    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
-    buffer = await ctx.decodeAudioData(await f.arrayBuffer());
-    nameEl.textContent = f.name; playBtn.disabled = false;
-  } catch (err) { nameEl.textContent = "Couldn't read that file. Try WAV or MP3."; }
-};
+    if (player.src) URL.revokeObjectURL(player.src);
+    player.src = URL.createObjectURL(f); player.load();
+    haveFile = true; playBtn.disabled = false; playBtn.textContent = 'Play';
+    say('Loaded: ' + f.name + '  -  press Play.');
+  } catch (err) { say("Couldn't open that file (" + err.message + '). Try an MP3, M4A or WAV.'); }
+}
+fileEl.addEventListener('change', e => loadFile(e.target.files[0]));
+['dragenter', 'dragover'].forEach(n => addEventListener(n, e => { e.preventDefault(); document.body.classList.add('drag'); }));
+['dragleave', 'drop'].forEach(n => addEventListener(n, e => { e.preventDefault(); document.body.classList.remove('drag'); }));
+addEventListener('drop', e => loadFile(e.dataTransfer && e.dataTransfer.files[0]));
+player.addEventListener('error', () => { playing = false; playBtn.textContent = 'Play'; say("This browser can't play that file. Try an MP3, M4A or WAV."); });
+player.addEventListener('ended', () => { playing = false; playBtn.textContent = 'Play'; });
+player.addEventListener('playing', () => { playing = true; playBtn.textContent = 'Pause'; });
+player.addEventListener('pause', () => { if (!testNode) playing = false; playBtn.textContent = 'Play'; });
 playBtn.onclick = () => {
-  if (playing) { src.stop(); return; }
-  ctx.resume();
-  analyser = ctx.createAnalyser(); analyser.fftSize = 16384; analyser.smoothingTimeConstant = 0.6;
-  bins = new Float32Array(analyser.frequencyBinCount);
-  src = ctx.createBufferSource(); src.buffer = buffer; src.connect(analyser); analyser.connect(ctx.destination);
-  src.onended = () => { playing = false; playBtn.textContent = 'Play'; };
-  src.start(); playing = true; playBtn.textContent = 'Stop';
+  if (!haveFile || !ensureAudio()) return;
+  if (!player.paused) { player.pause(); return; }
+  stopTest();
+  try { if (!mediaNode) { mediaNode = ctx.createMediaElementSource(player); mediaNode.connect(analyser); } }
+  catch (err) { say('Audio routing failed: ' + err.message); return; }
+  const pr = player.play();
+  if (pr && pr.catch) pr.catch(err => say("Couldn't start playback: " + err.message));
+};
+function stopTest() { if (testNode) { try { testNode.stop(); } catch (e) {} testNode = null; testBtn.textContent = 'Test sound'; playing = !player.paused; } }
+testBtn.onclick = () => {
+  if (testNode) { stopTest(); return; }
+  if (!ensureAudio()) return;
+  player.pause();
+  // 4 s loop of pink noise with a deliberate bump at 250 Hz: the meter should name 251 Hz as too loud.
+  const n = ctx.sampleRate * 4, buf = ctx.createBuffer(1, n, ctx.sampleRate), d = buf.getChannelData(0);
+  let b0 = 0, b1 = 0, b2 = 0, b3 = 0, b4 = 0, b5 = 0, b6 = 0;
+  for (let i = 0; i < n; i++) {
+    const w = Math.random() * 2 - 1;
+    b0 = 0.99886 * b0 + w * 0.0555179; b1 = 0.99332 * b1 + w * 0.0750759; b2 = 0.969 * b2 + w * 0.153852;
+    b3 = 0.8665 * b3 + w * 0.3104856; b4 = 0.55 * b4 + w * 0.5329522; b5 = -0.7616 * b5 - w * 0.016898;
+    d[i] = (b0 + b1 + b2 + b3 + b4 + b5 + b6 + w * 0.5362) * 0.08 + 0.12 * Math.sin(2 * Math.PI * 250 * i / ctx.sampleRate);
+    b6 = w * 0.115926;
+  }
+  testNode = ctx.createBufferSource(); testNode.buffer = buf; testNode.loop = true;
+  testGain = testGain || ctx.createGain(); testGain.gain.value = 0.5; testGain.connect(analyser);
+  testNode.connect(testGain); testNode.start();
+  playing = true; testBtn.textContent = 'Stop test';
+  say('Test sound playing: pink noise with too much 250 Hz. The meter should name 251 Hz as too loud. (Flat pink noise is not a song, so other bands will read off against a genre curve.)');
 };
 
 const smooth = new Array(NB).fill(0), hold = new Array(NB).fill(0), age = new Array(NB).fill(0);
 let lastT = performance.now(), lastChips = 0;
 function liveDev() {
-  if (!playing) return null;
+  if (!playing || !analyser) return null;
   analyser.getFloatFrequencyData(bins);
   const hz = ctx.sampleRate / analyser.fftSize, live = []; let tot = 0;
   for (let b = 0; b < NB; b++) {
