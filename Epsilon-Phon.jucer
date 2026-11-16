@@ -1,0 +1,126 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<JUCERPROJECT id="EPhn01" name="Epsilon Phon" projectType="audioplug" version="1.1.0"
+              companyName="Epsilon Sounds" bundleIdentifier="com.epsilonsounds.phon"
+              pluginName="Epsilon Phon" pluginDesc="Equal-loudness mix referee: measures your mix against hit records"
+              pluginManufacturer="Epsilon Sounds" pluginManufacturerCode="EpsS"
+              pluginCode="EpPh" pluginFormats="buildVST3,buildAU,buildStandalone"
+              pluginCharacteristicsValue=""
+              pluginVST3Category="Fx|Analyzer|EQ" pluginAUMainType="'aufx'"
+              cppLanguageStandard="17" useAppConfig="0" addUsingNamespaceToJuceHeader="0"
+              jucerFormatVersion="1">
+  <MAINGROUP id="EPmain" name="Epsilon Phon">
+    <GROUP id="EPg0" name="Source">
+      <FILE id="EPf000" name="PhonEngine.h" compile="0" resource="0" file="Source/PhonEngine.h"/>
+      <FILE id="EPf001" name="PluginProcessor.cpp" compile="1" resource="0" file="Source/PluginProcessor.cpp"/>
+      <FILE id="EPf002" name="PluginProcessor.h" compile="0" resource="0" file="Source/PluginProcessor.h"/>
+      <FILE id="EPf003" name="PluginEditor.cpp" compile="1" resource="0" file="Source/PluginEditor.cpp"/>
+      <FILE id="EPf004" name="PluginEditor.h" compile="0" resource="0" file="Source/PluginEditor.h"/>
+    </GROUP>
+    <GROUP id="EPg1" name="epsilon_ui (shared look)">
+      <FILE id="EPf005" name="EpsilonUI.h" compile="0" resource="0" file="Shared/epsilon_ui/EpsilonUI.h"/>
+      <FILE id="EPf006" name="EpsilonPalette.h" compile="0" resource="0" file="Shared/epsilon_ui/EpsilonPalette.h"/>
+      <FILE id="EPf007" name="EpsilonBrandArt.h" compile="0" resource="0" file="Shared/epsilon_ui/EpsilonBrandArt.h"/>
+      <FILE id="EPf008" name="EpsilonHeader.h" compile="0" resource="0" file="Shared/epsilon_ui/EpsilonHeader.h"/>
+      <FILE id="EPf009" name="EpsilonSignature.h" compile="0" resource="0" file="Shared/epsilon_ui/EpsilonSignature.h"/>
+      <FILE id="EPf012" name="EpsilonControls.h" compile="0" resource="0" file="Shared/epsilon_ui/EpsilonControls.h"/>
+    </GROUP>
+    <GROUP id="EPg2" name="Resources">
+      <FILE id="EPf014" name="EpsilonDial-Regular.ttf" compile="0" resource="1" file="Resources/EpsilonDial-Regular.ttf"/>
+      <FILE id="EPf015" name="EpsilonDial-Bold.ttf" compile="0" resource="1" file="Resources/EpsilonDial-Bold.ttf"/>
+      <FILE id="EPf013" name="AppIcon.png" compile="0" resource="0" file="Resources/AppIcon.png"/>
+      <FILE id="EPf011" name="EpsilonDial-LICENSE.txt" compile="0" resource="0" file="Resources/EpsilonDial-LICENSE.txt"/>
+    </GROUP>
+    <GROUP id="EPg3" name="Tests">
+      <FILE id="EPf020" name="EngineTests.cpp" compile="0" resource="0" file="Tests/EngineTests.cpp"/>
+    </GROUP>
+  </MAINGROUP>
+  <EXPORTFORMATS>
+    <XCODE_MAC targetFolder="Builds/MacOSX" bigIcon="EPf013">
+      <CONFIGURATIONS>
+        <CONFIGURATION name="Debug" isDebug="1" optimisation="3" targetName="Epsilon Phon"
+                       osxArchitecture="Native" macOSDeploymentTarget="12.0" enablePluginBinaryCopyStep="1"
+                       vst3BinaryLocation="$(HOME)/Library/Audio/Plug-Ins/VST3" auBinaryLocation="$(HOME)/Library/Audio/Plug-Ins/Components"/>
+        <CONFIGURATION name="Release" isDebug="0" optimisation="3" targetName="Epsilon Phon"
+                       osxArchitecture="64BitUniversal" macOSDeploymentTarget="12.0"
+                       enablePluginBinaryCopyStep="1" vst3BinaryLocation="$(HOME)/Library/Audio/Plug-Ins/VST3"
+                       auBinaryLocation="$(HOME)/Library/Audio/Plug-Ins/Components"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
+      </MODULEPATHS>
+    </XCODE_MAC>
+    <VS2022 targetFolder="Builds/VisualStudio2022" bigIcon="EPf013">
+      <CONFIGURATIONS>
+        <CONFIGURATION name="Debug" isDebug="1" optimisation="3" targetName="Epsilon Phon"/>
+        <CONFIGURATION name="Release" isDebug="0" optimisation="3" targetName="Epsilon Phon"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
+      </MODULEPATHS>
+    </VS2022>
+    <LINUX_MAKE targetFolder="Builds/LinuxMakefile" bigIcon="EPf013">
+      <CONFIGURATIONS>
+        <CONFIGURATION name="Debug" isDebug="1" optimisation="3" targetName="Epsilon Phon"/>
+        <CONFIGURATION name="Release" isDebug="0" optimisation="3" targetName="Epsilon Phon"/>
+      </CONFIGURATIONS>
+      <MODULEPATHS>
+        <MODULEPATH id="juce_audio_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_devices" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_formats" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_plugin_client" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_processors_headless" path="JUCE/modules"/>
+        <MODULEPATH id="juce_audio_utils" path="JUCE/modules"/>
+        <MODULEPATH id="juce_core" path="JUCE/modules"/>
+        <MODULEPATH id="juce_data_structures" path="JUCE/modules"/>
+        <MODULEPATH id="juce_events" path="JUCE/modules"/>
+        <MODULEPATH id="juce_graphics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_basics" path="JUCE/modules"/>
+        <MODULEPATH id="juce_gui_extra" path="JUCE/modules"/>
+      </MODULEPATHS>
+    </LINUX_MAKE>
+  </EXPORTFORMATS>
+  <MODULES>
+    <MODULE id="juce_audio_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_devices" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_formats" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_plugin_client" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_audio_processors_headless" showAllCode="1" useLocalCopy="0"
+            useGlobalPath="0"/>
+    <MODULE id="juce_audio_utils" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_core" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_data_structures" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_events" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_graphics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_basics" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+    <MODULE id="juce_gui_extra" showAllCode="1" useLocalCopy="0" useGlobalPath="0"/>
+  </MODULES>
+  <JUCEOPTIONS JUCE_WEB_BROWSER="0" JUCE_USE_CURL="0" JUCE_VST3_CAN_REPLACE_VST2="0"/>
+</JUCERPROJECT>

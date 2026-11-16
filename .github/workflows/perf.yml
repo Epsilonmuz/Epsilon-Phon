@@ -1,0 +1,24 @@
+name: Performance (Intel + Apple Silicon)
+
+# Times the audio engine against the real-time budget on an Intel Mac (like a 2019 MacBook Pro)
+# and on Apple Silicon. Fails if the engine tests (including the speed checks) fail.
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main ]
+    paths: [ 'Source/PhonEngine.h', 'Tests/EngineTests.cpp', '.github/workflows/perf.yml' ]
+
+jobs:
+  perf:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ macos-15-intel, macos-15 ]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Engine timing
+        run: |
+          clang++ -std=c++17 -O3 -ISource Tests/EngineTests.cpp -o engine_tests
+          ./engine_tests | tee result.txt
+          grep -E "Speed|ALL PASSED|FAILED" result.txt >> "$GITHUB_STEP_SUMMARY" || true

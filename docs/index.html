@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Epsilon Phon — try the live view in your browser</title>
+<style>
+  :root { --bg:#16171a; --surface:#1f2125; --raised:#292c31; --line:#3b3f46; --ink:#f2f3f5; --muted:#a2a7af; --trim:#b9bec6; --live:#e4d3a3; --ok:#9cc08a; --hot:#e3b45a; --clip:#e0604f; --blue:#7fa8d6; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--ink); font:15px/1.5 system-ui, -apple-system, "Segoe UI", sans-serif; }
+  main { max-width: 980px; margin: 0 auto; padding: 20px 16px 48px; }
+  h1 { font-size: 20px; letter-spacing: .22em; text-transform: uppercase; color: var(--trim); margin: 8px 0 2px; }
+  .tag { color: var(--muted); font-size: 12px; letter-spacing: .16em; text-transform: uppercase; margin-bottom: 18px; }
+  .panel { background: var(--surface); border:1px solid var(--line); border-radius: 10px; padding: 16px; margin-bottom: 14px; }
+  .row { display:flex; flex-wrap:wrap; gap:10px; align-items:center; }
+  label.btn, button, select { background: var(--raised); color: var(--ink); border:1px solid var(--line); border-radius: 7px; padding: 9px 14px; font: inherit; cursor: pointer; }
+  button:disabled { opacity:.45; cursor: default; }
+  input[type=file] { display:none; }
+  canvas { width:100%; height:260px; display:block; background: var(--bg); border:1px solid var(--line); border-radius: 8px; }
+  #chips { min-height: 34px; display:flex; flex-wrap:wrap; gap:8px; align-items:center; margin: 4px 0 10px; }
+  .lab { font-size: 11px; font-weight: 700; letter-spacing: .16em; }
+  .chip { border-radius: 6px; padding: 3px 10px; font-weight: 700; font-size: 13px; border:1px solid; }
+  .note { color: var(--muted); font-size: 13px; }
+  img { max-width:100%; border-radius: 10px; border:1px solid var(--line); }
+  a { color: var(--live); }
+</style>
+</head>
+<body>
+<main>
+  <h1>Epsilon Phon</h1>
+  <div class="tag">Equal-loudness mix referee · browser demo of the live view</div>
+
+  <div class="panel">
+    <div class="row">
+      <label class="btn">Choose your mix<input id="file" type="file" accept="audio/*"></label>
+      <select id="genre" aria-label="Target"></select>
+      <button id="play" disabled>Play</button>
+      <span id="name" class="note">Pick an audio file. It stays on your device; nothing is uploaded.</span>
+    </div>
+  </div>
+
+  <div class="panel">
+    <div id="chips"><span class="lab" style="color:var(--muted)">LIVE — WAITING FOR AUDIO</span></div>
+    <canvas id="cv" width="1900" height="520" role="img" aria-label="Live meter: each band against the target"></canvas>
+    <p class="note">Bars up (amber / red) = louder than it should be right now. Bars down (blue) = missing. Green zone = within 2 dB of the target.
+      This demo uses the modelled genre curves only. The plugin adds your own hit records, Ear X-ray (ISO 226), the translation grid, LUFS / true peak, Match EQ and Hear-at.</p>
+  </div>
+
+  <div class="panel">
+    <img src="epsilon-phon-editor.png" alt="Epsilon Phon plugin window">
+    <p class="note">The plugin (VST3 / AU / Standalone). Builds are under Actions in the <a href="https://github.com/Epsilonmuz/Epsilon-Phon">repository</a>.</p>
+  </div>
+</main>
+<script>
+// Same band layout, genre models and live-deviation maths as Source/PhonEngine.h.
+const NB = 29, centre = b => 1000 * Math.pow(10, (b - 16) / 10);
+const useBand = b => centre(b) >= 30 && centre(b) <= 13000;
+const GENRES = [
+  ["Trap", -2.2, -1.0, 7.0, 50, 28, 0.5], ["Drill", -2.2, -1.2, 7.0, 45, 26, 1.0], ["Dembow / Reggaeton", -2.0, -1.2, 5.0, 60, 32, 1.0],
+  ["Hip-Hop", -2.3, -1.5, 4.0, 60, 35, 0.0], ["Pop", -2.0, -2.0, 2.5, 60, 35, 1.0], ["R&B", -2.5, -2.5, 3.5, 55, 32, 0.0],
+  ["EDM", -1.8, -1.2, 5.0, 55, 30, 0.5], ["Rock", -1.8, -2.5, 0.5, 80, 45, 1.5]];
+function profile(g) {
+  const [, slope, top, sub, subF, cut, pres] = GENRES[g], out = [];
+  for (let b = 0; b < NB; b++) {
+    const f = centre(b); let d = slope * Math.log2(f / 1000);
+    if (f > 4000) d += top * Math.log2(f / 4000);
+    const so = Math.log2(f / subF) / 0.9; d += sub * Math.exp(-0.5 * so * so);
+    const po = Math.log2(f / 3000) / 0.8; d += pres * Math.exp(-0.5 * po * po);
+    if (f < cut) d -= 18 * Math.log2(cut / f);
+    if (f > 14000) d -= 8 * Math.log2(f / 14000);
+    out.push(d);
+  }
+  return out;
+}
+const sel = document.getElementById('genre');
+GENRES.forEach((g, i) => sel.add(new Option(g[0], i)));
+let target = profile(0);
+sel.onchange = () => target = profile(+sel.value);
+
+let ctx, analyser, src, buffer, playing = false, bins;
+const playBtn = document.getElementById('play'), nameEl = document.getElementById('name');
+document.getElementById('file').onchange = async e => {
+  const f = e.target.files[0]; if (!f) return;
+  nameEl.textContent = 'Decoding ' + f.name + '…';
+  try {
+    ctx = ctx || new (window.AudioContext || window.webkitAudioContext)();
+    buffer = await ctx.decodeAudioData(await f.arrayBuffer());
+    nameEl.textContent = f.name; playBtn.disabled = false;
+  } catch (err) { nameEl.textContent = "Couldn't read that file. Try WAV or MP3."; }
+};
+playBtn.onclick = () => {
+  if (playing) { src.stop(); return; }
+  ctx.resume();
+  analyser = ctx.createAnalyser(); analyser.fftSize = 16384; analyser.smoothingTimeConstant = 0.6;
+  bins = new Float32Array(analyser.frequencyBinCount);
+  src = ctx.createBufferSource(); src.buffer = buffer; src.connect(analyser); analyser.connect(ctx.destination);
+  src.onended = () => { playing = false; playBtn.textContent = 'Play'; };
+  src.start(); playing = true; playBtn.textContent = 'Stop';
+};
+
+const smooth = new Array(NB).fill(0), hold = new Array(NB).fill(0), age = new Array(NB).fill(0);
+let lastT = performance.now(), lastChips = 0;
+function liveDev() {
+  if (!playing) return null;
+  analyser.getFloatFrequencyData(bins);
+  const hz = ctx.sampleRate / analyser.fftSize, live = []; let tot = 0;
+  for (let b = 0; b < NB; b++) {
+    const lo = Math.max(1, Math.ceil(centre(b) * Math.pow(10, -0.05) / hz)), hi = Math.min(bins.length - 1, Math.floor(centre(b) * Math.pow(10, 0.05) / hz));
+    let p = 0; for (let k = lo; k <= Math.max(lo, hi); k++) p += Math.pow(10, bins[k] / 10);
+    tot += p; live.push(10 * Math.log10(Math.max(p, 1e-30)));
+  }
+  if (10 * Math.log10(Math.max(tot, 1e-30)) < -75) return null;
+  const d = []; for (let b = 0; b < NB; b++) if (centre(b) >= 63 && centre(b) <= 8100) d.push(live[b] - target[b]);
+  d.sort((a, c) => a - c);
+  const off = d.length % 2 ? d[(d.length - 1) / 2] : 0.5 * (d[d.length / 2 - 1] + d[d.length / 2]);
+  return live.map((v, b) => useBand(b) ? Math.max(-18, Math.min(18, v - target[b] - off)) : 0);
+}
+function offenders(dev, thr, over, max) {
+  const all = [];
+  for (let b = 0; b < NB; b++) {
+    if (!useBand(b)) continue;
+    const s = over ? 1 : -1, v = s * dev[b]; if (v < thr) continue;
+    const l = b > 0 ? s * dev[b - 1] : -99, r = b < NB - 1 ? s * dev[b + 1] : -99;
+    if (v >= l && v > r) all.push([b, dev[b]]);
+  }
+  return all.sort((a, c) => Math.abs(c[1]) - Math.abs(a[1])).slice(0, max);
+}
+const css = n => getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+const fmtHz = f => f >= 1000 ? (f / 1000).toFixed(1) + ' kHz' : Math.round(f) + ' Hz';
+const cv = document.getElementById('cv'), g = cv.getContext('2d'), chips = document.getElementById('chips');
+function frame(t) {
+  const dt = Math.min(0.25, (t - lastT) / 1000); lastT = t;
+  const dev = liveDev(), a = 1 - Math.exp(-dt / 0.5);
+  const W = cv.width, H = cv.height, L = 70, R = 20, mid = H / 2 - 20, half = mid - 20, range = 9;
+  const x = f => L + (Math.log(f / 20) / Math.log(1000)) * (W - L - R), y = d => mid - Math.max(-range, Math.min(range, d)) / range * half;
+  g.clearRect(0, 0, W, H);
+  g.fillStyle = 'rgba(156,192,138,0.08)'; g.fillRect(L, y(2), W - L - R, y(-2) - y(2));
+  g.strokeStyle = css('--line'); g.lineWidth = 2; g.beginPath(); g.moveTo(L, mid); g.lineTo(W - R, mid); g.stroke();
+  g.fillStyle = css('--muted'); g.font = '22px system-ui'; g.textAlign = 'right';
+  g.fillText('+9', L - 12, y(9) + 16); g.fillText('0', L - 12, mid + 8); g.fillText('-9', L - 12, y(-9));
+  g.textAlign = 'center';
+  [31.5, 63, 125, 250, 500, 1000, 2000, 4000, 8000, 16000].forEach(f => g.fillText(f >= 1000 ? f / 1000 + 'k' : f, x(f), H - 12));
+  const bw = (x(centre(1)) - x(centre(0))) * 0.72;
+  for (let b = 0; b < NB; b++) {
+    if (!useBand(b)) continue;
+    const v = dev ? dev[b] : 0;
+    smooth[b] += a * (v - smooth[b]);
+    if (v >= hold[b]) { hold[b] = v; age[b] = 0; } else if ((age[b] += dt) > 1.5) hold[b] = Math.max(v, hold[b] - 14 * dt);
+    g.fillStyle = !dev ? css('--raised') : v > 4 ? css('--clip') : v > 2 ? css('--hot') : v < -2 ? css('--blue') : 'rgba(156,192,138,0.55)';
+    const yy = y(v); g.fillRect(x(centre(b)) - bw / 2, Math.min(yy, mid), bw, Math.max(3, Math.abs(yy - mid)));
+    if (hold[b] > 2) { g.fillStyle = hold[b] > 4 ? css('--clip') : css('--hot'); g.fillRect(x(centre(b)) - bw / 2, y(hold[b]) - 2, bw, 4); }
+  }
+  if (t - lastChips > 250) {
+    lastChips = t;
+    const chip = (o, c) => `<span class="chip" style="border-color:${c};background:${c}30">${fmtHz(centre(o[0]))} &nbsp;${o[1] > 0 ? '+' : ''}${o[1].toFixed(1)} dB</span>`;
+    if (!dev) chips.innerHTML = '<span class="lab" style="color:var(--muted)">LIVE — WAITING FOR AUDIO</span>';
+    else {
+      const ov = offenders(smooth, 2.5, true, 3), un = offenders(smooth, 3.5, false, 2);
+      let h = '';
+      if (!ov.length && !un.length) h = '<span class="lab" style="color:var(--ok)">LIVE — NOTHING STICKING OUT RIGHT NOW</span>';
+      if (ov.length) h += '<span class="lab" style="color:var(--hot)">TOO LOUD NOW</span>' + ov.map(o => chip(o, o[1] > 4 ? css('--clip') : css('--hot'))).join('');
+      if (un.length) h += '<span class="lab" style="color:var(--blue)">MISSING</span>' + un.map(o => chip(o, css('--blue'))).join('');
+      chips.innerHTML = h;
+    }
+  }
+  requestAnimationFrame(frame);
+}
+requestAnimationFrame(frame);
+</script>
+</body>
+</html>
