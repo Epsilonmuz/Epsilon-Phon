@@ -71,10 +71,12 @@ double play(EpsilonPhonProcessor& p, double sr, double seconds, Gen&& gen, juce:
         const auto t0 = juce::Time::getHighResolutionTicks();
         p.processBlock(buf, midi);
         worst = std::max(worst, juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - t0));
-        if ((pos / block) % 64 == 0) juce::MessageManager::getInstance()->runDispatchLoopUntil(1);
+        // The bench runs faster than real time: pace it so the analysis worker (25 ms cycle) keeps up
+        // on any machine instead of overflowing its ring.
+        if ((pos / block) % 16 == 15) juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
     }
     if (lastOut) lastOut->makeCopyOf(buf);
-    juce::Thread::sleep(150);
+    juce::Thread::sleep(200);
     return worst / (block / sr) * 100.0;
 }
 
