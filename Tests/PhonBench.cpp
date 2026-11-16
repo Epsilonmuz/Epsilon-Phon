@@ -63,21 +63,24 @@ double play(EpsilonPhonProcessor& p, double sr, double seconds, Gen&& gen, juce:
     juce::AudioBuffer<float> buf(2, block);
     juce::MidiBuffer midi;
     const int total = (int) (sr * seconds);
-    double worst = 0;
+    std::vector<double> times; times.reserve((size_t) (total / block + 1));
     static long long n = 0;                      // continuous phase across calls (no clicks between plays)
     for (int pos = 0; pos < total; pos += block)
     {
         for (int i = 0; i < block; ++i) { const float v = gen(n++); buf.setSample(0, i, v); buf.setSample(1, i, v); }
         const auto t0 = juce::Time::getHighResolutionTicks();
         p.processBlock(buf, midi);
-        worst = std::max(worst, juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - t0));
+        times.push_back(juce::Time::highResolutionTicksToSeconds(juce::Time::getHighResolutionTicks() - t0));
         // The bench runs faster than real time: pace it so the analysis worker (25 ms cycle) keeps up
         // on any machine instead of overflowing its ring.
         if ((pos / block) % 16 == 15) juce::MessageManager::getInstance()->runDispatchLoopUntil(30);
     }
     if (lastOut) lastOut->makeCopyOf(buf);
     juce::Thread::sleep(200);
-    return worst / (block / sr) * 100.0;
+    // 99th percentile block time: one scheduler hiccup on a shared CI machine is not the plugin's cost.
+    std::sort(times.begin(), times.end());
+    const double p99 = times.empty() ? 0.0 : times[(size_t) ((times.size() - 1) * 0.99)];
+    return p99 / (block / sr) * 100.0;
 }
 
 float rmsDb(const juce::AudioBuffer<float>& b) { return juce::Decibels::gainToDecibels(b.getRMSLevel(0, 0, b.getNumSamples()), -150.0f); }
@@ -117,7 +120,7 @@ int main(int argc, char** argv)
         const auto cmp = phon::compare(s.average, p.currentTarget(), 79.0f);
         check(cmp.valid && cmp.rangeDb[2] > 1.0f, "low-mid flagged heavy vs hits: +" + juce::String(cmp.rangeDb[2], 1) + " dB" + at);
         check(std::abs(cmp.rangeDb[0]) < 1.5f, "sub matches the hits: " + juce::String(cmp.rangeDb[0], 1) + " dB" + at);
-        check(cpuPct < 50.0, "worst block " + juce::String(cpuPct, 1) + " % of real-time budget (debug-safe bound)" + at);
+        check(cpuPct < 25.0, "99th-percentile block " + juce::String(cpuPct, 1) + " % of real-time budget" + at);
 
         // real time: the live view names 250 Hz as too loud while it plays
         {
