@@ -2,6 +2,11 @@
 
 ![Epsilon Phon](docs/epsilon-phon-editor.png)
 
+## Install (no build needed)
+
+**Mac (Intel and Apple Silicon):** download [Epsilon Phon for Mac](https://github.com/Epsilonmuz/Epsilon-Phon/releases/latest/download/Epsilon-Phon-macOS-Installer.pkg). Double-click it: the VST3 goes to `/Library/Audio/Plug-Ins/VST3`, the Audio Unit to `/Library/Audio/Plug-Ins/Components` and the standalone app to Applications. Then rescan in your DAW (FL Studio: Options > Manage plugins > Find installed plugins). The first time, macOS may say it can't check the installer (it isn't notarised by Apple): click Done, then System Settings > Privacy & Security > **Open Anyway**. No Terminal commands needed. The link always gives the newest build of `main`; it is rebuilt, test-installed on GitHub's Mac and replaced on every push.
+
+
 ![Built-in manual](docs/epsilon-phon-help.png)
 
 Your ears change their EQ with volume (Fletcher-Munson, today ISO 226). Epsilon Phon measures your mix the way the hits are measured, then shows what you actually hear at your listening level and at phone / loud volumes.
